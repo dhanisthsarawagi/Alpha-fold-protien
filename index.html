@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Interactive AlphaFold Protein Viewer</title>
+  <!-- jQuery (only needed to simplify AJAX); drop it if you prefer fetch() -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <!-- 3Dmol core library -->
+  <script src="https://3Dmol.org/build/3Dmol-min.js"></script>
+  <style>
+    /* Simple two‑pane layout */
+    body { margin: 0; font-family: system-ui, sans-serif; display: flex; height: 100vh; }
+    #viewer  { width: 70%; height: 100vh; }
+    #sidebar { width: 30%; padding: 1rem; overflow-y: auto; border-left: 1px solid #ccc; box-sizing: border-box; }
+    #sidebar h2 { margin-top: 0; }
+  </style>
+</head>
+<body>
+  <div id="viewer"></div>
+  <div id="sidebar">
+    <h2>Residue details</h2>
+    <div id="info">Click any residue in the 3D view to see its details ↖️</div>
+  </div>
+
+  <script>
+    /**
+     * Load an AlphaFold PDB into the viewer and wire up click‑to‑inspect behaviour.
+     * @param {string} uniprot  e.g. "Q8I3H7"
+     * @param {string} model    AlphaFold model label (F1..F5); default F1
+     */
+    function loadProtein(uniprot, model = "F1") {
+      const pdbUrl = `https://alphafold.ebi.ac.uk/files/AF-${uniprot}-${model}-model_v4.pdb`;
+      const viewerElt = document.getElementById("viewer");
+
+      // If a viewer already exists, remove its canvas before creating a new one.
+      viewerElt.innerHTML = "";
+
+      // Create viewer with white background.
+      const viewer = $3Dmol.createViewer(viewerElt, { backgroundColor: "white" });
+
+      // Fetch the PDB and build the scene.
+      $.get(pdbUrl)
+        .done(function (data) {
+          const model = viewer.addModel(data, "pdb");
+
+          // Default style: rainbow cartoon by residue index.
+          model.setStyle({}, { cartoon: { color: "spectrum" } });
+
+          // Make *every* atom clickable.
+          model.setClickable({}, true, function (atom /* $3Dmol.AtomSpec */) {
+            // 1 – Highlight the clicked residue.
+            const residueSel = { chain: atom.chain, resi: atom.resi };
+            viewer.setStyle({}, { cartoon: { color: "spectrum" } }); // reset
+            model.setStyle(residueSel, {
+              stick: { colorscheme: "greenCarbon" },
+              cartoon: { color: "yellow" },
+            });
+
+            // 2 – Display residue metadata in the sidebar.
+            const plddt = atom.b ? atom.b.toFixed(1) : "n/a"; // AlphaFold stores pLDDT in B‑factor
+            document.getElementById("info").innerHTML = `
+              <p><strong>Residue</strong>: ${atom.resn} ${atom.resi}</p>
+              <p><strong>Chain</strong>: ${atom.chain || "-"}</p>
+              <p><strong>pLDDT</strong>: ${plddt}</p>
+            `;
+
+            viewer.render();
+          });
+
+          viewer.zoomTo();
+          viewer.render();
+        })
+        .fail(() => alert(`Could not fetch structure for ${uniprot}`));
+    }
+
+    // 🚀 Load the example you linked
+    loadProtein("P38398");
+  </script>
+</body>
+</html>
